@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import uvicorn
 import os
 from app.analyzer import analyze_contour_map
 
@@ -24,6 +25,10 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
 @app.post("/api/analyze-contour")
 async def analyze_contour(
     contour_map: UploadFile = File(None),
@@ -31,10 +36,6 @@ async def analyze_contour(
     runoff_coefficient: float = Form(0.4),
     rainfall_mm: float = Form(None)
 ):
-    """
-    Accepts a KML or KMZ contour map file and runs a terrain analysis to find
-    the optimal pond location and its catchment area.
-    """
     upload_file = contour_map or file
     if not upload_file:
         raise HTTPException(
@@ -50,10 +51,7 @@ async def analyze_contour(
         )
         
     try:
-        # Read uploaded file content
         file_content = await upload_file.read()
-        
-        # Perform terrain and catchment analysis
         result = analyze_contour_map(
             file_content=file_content,
             filename=filename,
@@ -93,9 +91,6 @@ async def find_catchment_legacy(
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():
-    """
-    Serves the interactive, premium web interface for the catchment analysis.
-    """
     index_path = os.path.join(TEMPLATES_DIR, "index.html")
     if not os.path.exists(index_path):
         raise HTTPException(status_code=404, detail="Dashboard template not found.")
@@ -103,3 +98,9 @@ async def get_dashboard():
     with open(index_path, "r", encoding="utf-8") as f:
         html_content = f.read()
     return html_content
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    # If main.py is in root, use "main:app". If inside app folder, use "app.main:app"
+    app_target = "app.main:app" if os.path.exists("app/main.py") else "main:app"
+    uvicorn.run(app_target, host="0.0.0.0", port=port, reload=True)
