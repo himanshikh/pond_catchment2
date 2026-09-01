@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AquaTerrace - Pond Catchment Analysis AI</title>
+    
+    <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for Premium Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet.js CSS for Interactive Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-surface: rgba(18, 26, 43, 0.7);
+            --bg-surface-solid: #121a2b;
+            --border-glow: rgba(0, 242, 254, 0.15);
+            --border-glow-active: rgba(0, 242, 254, 0.4);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --color-cyan: #00f2fe;
+            --color-blue: #4facfe;
+            --color-green: #10b981;
+            --color-red: #ef4444;
+            --color-yellow: #f59e0b;
+            --font-main: 'Plus Jakarta Sans', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --shadow-glow: 0 0 20px rgba(0, 242, 254, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(10, 14, 23, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 242, 254, 0.2);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 242, 254, 0.5);
+        }
+
+        header {
+            background: rgba(10, 14, 23, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 0.85rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .logo-icon {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--color-blue), var(--color-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.3));
+        }
+
+        .logo-text {
+            font-weight: 800;
+            font-size: 1.25rem;
+            letter-spacing: -0.025em;
+            background: linear-gradient(to right, #ffffff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-tag {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--color-cyan);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .doc-link {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: color 0.2s;
+        }
+
+        .doc-link:hover {
+            color: var(--color-cyan);
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Sidebar Container */
+        .sidebar {
+            width: 440px;
+            background: rgba(10, 14, 23, 0.65);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            z-index: 90;
+            overflow-y: auto;
+            padding: 1.5rem;
+            gap: 1.5rem;
+        }
+
+        /* Card Components */
+        .glass-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: var(--shadow-glow);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(0, 242, 254, 0.25);
+        }
+
+        .card-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+        }
+
+        .card-title i {
+            color: var(--color-cyan);
+        }
+
+        /* File Upload Area */
+        .upload-zone {
+            border: 2px dashed var(--border-glow);
+            border-radius: 10px;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            background: rgba(0, 242, 254, 0.02);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--color-cyan);
+            background: rgba(0, 242, 254, 0.05);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.08);
+        }
+
+        .upload-zone i {
+            font-size: 2.25rem;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(135deg, var(--color-blue), var(--color-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .upload-zone h4 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .upload-zone p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        /* Form Inputs */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .form-control {
+            width: 100%;
+            background: rgba(10, 14, 23, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            padding: 0.6rem 0.8rem;
+            color: #ffffff;
+            font-family: var(--font-main);
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            border-color: var(--color-cyan);
+        }
+
+        .btn-submit {
+            width: 100%;
+            background: linear-gradient(135deg, var(--color-blue), var(--color-cyan));
+            color: #020617;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.25);
+        }
+
+        .btn-submit:hover {
+            opacity: 0.92;
+        }
+
+        .btn-submit:active {
+            transform: scale(0.98);
+        }
+
+        /* Results Display */
+        .results-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-cols: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .metric-card {
+            background: rgba(10, 14, 23, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-label {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-value {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .metric-value.highlight-cyan {
+            color: var(--color-cyan);
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+
+        .metric-value.highlight-green {
+            color: var(--color-green);
+        }
+
+        .metric-sub {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+        }
+
+        /* Pond recommendation detail box */
+        .pond-details {
+            background: rgba(0, 242, 254, 0.02);
+            border: 1px solid rgba(0, 242, 254, 0.1);
+            border-radius: 8px;
+            padding: 0.85rem;
+            font-size: 0.8rem;
+        }
+
+        .pond-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.35rem 0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
+        }
+
+        .pond-detail-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .pond-detail-row:first-child {
+            padding-top: 0;
+        }
+
+        .pond-detail-label {
+            color: var(--text-secondary);
+        }
+
+        .pond-detail-value {
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        /* Math formula describer */
+        .formula-card {
+            background: rgba(10, 14, 23, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 8px;
+            padding: 0.85rem;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .formula-code {
+            font-family: var(--font-mono);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.35rem 0.5rem;
+            border-radius: 4px;
+            color: var(--color-cyan);
+            margin: 0.5rem 0;
+            font-size: 0.7rem;
+            display: block;
+            border-left: 2px solid var(--color-cyan);
+        }
+
+        /* Map Container */
+        .map-container {
+            flex: 1;
+            position: relative;
+            background-color: #0b0f19;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Map Overlay Controls */
+        .map-overlay-card {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(10, 14, 23, 0.8);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            padding: 0.75rem;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            font-size: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            width: 200px;
+        }
+
+        .overlay-title {
+            font-weight: 700;
+            color: #ffffff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 0.25rem;
+            margin-bottom: 0.25rem;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Spinner Overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(6, 10, 18, 0.9);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 242, 254, 0.1);
+            border-top-color: var(--color-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.4));
+        }
+
+        .loading-title {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+        }
+
+        .loading-step {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            min-height: 1.25rem;
+        }
+
+        /* Pulse Marker Animation */
+        .pulsing-marker {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--color-red);
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+            position: relative;
+        }
+
+        .pulsing-marker::after {
+            content: '';
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.3);
+            position: absolute;
+            top: -12px;
+            left: -12px;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Numbered site markers */
+        .numbered-marker {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-main);
+            font-size: 0.7rem;
+            font-weight: 800;
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 12px rgba(0,0,0,0.5);
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+
+        .numbered-marker:hover {
+            transform: scale(1.2);
+        }
+
+        .numbered-marker.rank-1 {
+            background: var(--color-red);
+            box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+        }
+        .numbered-marker.rank-2 {
+            background: #f97316;
+            box-shadow: 0 0 14px rgba(249, 115, 22, 0.4);
+        }
+        .numbered-marker.rank-3 {
+            background: var(--color-yellow);
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+        }
+        .numbered-marker.rank-4 {
+            background: var(--color-green);
+            box-shadow: 0 0 14px rgba(16, 185, 129, 0.4);
+        }
+        .numbered-marker.rank-5 {
+            background: var(--color-blue);
+            box-shadow: 0 0 14px rgba(79, 172, 254, 0.4);
+        }
+
+        /* Site selector */
+        .site-selector-card {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .site-btn {
+            flex: 1;
+            min-width: 60px;
+            padding: 0.5rem 0.25rem;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            background: rgba(10, 14, 23, 0.5);
+            color: var(--text-secondary);
+            font-family: var(--font-main);
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .site-btn:hover {
+            border-color: var(--color-cyan);
+            color: #ffffff;
+        }
+
+        .site-btn.active {
+            background: rgba(0, 242, 254, 0.1);
+            border-color: var(--color-cyan);
+            color: var(--color-cyan);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.1);
+        }
+
+        .site-btn .site-rank {
+            display: block;
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 0.15rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        /* Floating empty state message on map */
+        .map-placeholder {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 500;
+            text-align: center;
+            pointer-events: none;
+            background: rgba(10, 14, 23, 0.7);
+            border: 1px dashed var(--border-glow);
+            padding: 1.5rem 2rem;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            max-width: 320px;
+        }
+
+        .map-placeholder i {
+            font-size: 2rem;
+            color: var(--color-cyan);
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .map-placeholder p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-area">
+            <i class="fa-solid fa-water logo-icon"></i>
+            <span class="logo-text">AquaTerrace</span>
+            <span class="logo-tag">Catchment AI</span>
+        </div>
+        <div class="header-actions">
+            <a href="https://github.com/google-deepmind" target="_blank" class="doc-link">
+                <i class="fa-brands fa-github"></i> Docs
+            </a>
+        </div>
+    </header>
+
+    <main>
+        <!-- Sidebar Dashboard -->
+        <div class="sidebar">
+            <!-- Upload Panel -->
+            <div class="glass-card">
+                <div class="card-title">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Terrain Input</span>
+                </div>
+                
+                <div class="form-group">
+                    <div class="upload-zone" id="drop-zone">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                        <h4 id="file-name-label">Upload Contour Map</h4>
+                        <p id="file-desc-label">Drag & drop KML or KMZ file</p>
+                        <input type="file" id="file-input" class="file-input" accept=".kml,.kmz">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="param-runoff">Runoff Coefficient (C)</label>
+                    <select class="form-control" id="param-runoff">
+                        <option value="0.3">0.3 - Sandy Loam, Veg Cover</option>
+                        <option value="0.4" selected>0.4 - Clay/Silt Loam (Default)</option>
+                        <option value="0.5">0.5 - Hard Clay Soils</option>
+                        <option value="0.6">0.6 - Barren/High Slope Clay</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="param-rainfall">Rainfall Override (R)</label>
+                    <input type="number" class="form-control" id="param-rainfall" placeholder="Dynamic (Open-Meteo Archive)" min="100" max="5000">
+                </div>
+
+                <button class="btn-submit" id="btn-analyze">
+                    <i class="fa-solid fa-compass-drafting"></i>
+                    <span>Analyze Catchment</span>
+                </button>
+            </div>
+
+            <!-- Empty State / Instructions -->
+            <div class="glass-card" id="empty-state-card">
+                <div class="card-title">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>How it works</span>
+                </div>
+                <div class="formula-card" style="font-size: 0.8rem; display:flex; flex-direction:column; gap:0.5rem;">
+                    <p><strong>1. Interpolate DEM:</strong> Converts discrete contour isolines into a continuous elevation grid using SciPy's spatial interpolators.</p>
+                    <p><strong>2. D8 Flow Routing:</strong> Calculates the direction of water flow for each grid cell based on the local steepest descent.</p>
+                    <p><strong>3. Sink Tracing:</strong> Identifies closed basins (sinks) and groups all upstream cells flowing into them to compute the catchment boundaries.</p>
+                </div>
+            </div>
+
+            <!-- Results Panel (Hidden by default) -->
+            <div class="results-section hidden" id="results-panel">
+                <!-- Site Selector -->
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-map-pin"></i>
+                        <span>Candidate Pond Sites</span>
+                    </div>
+                    <div class="site-selector-card" id="site-selector">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Location details -->
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                        <span id="site-title">Pond Site #1</span>
+                    </div>
+                    
+                    <div class="metric-grid">
+                        <div class="metric-card">
+                            <span class="metric-label">Coordinates</span>
+                            <span class="metric-value highlight-cyan" id="res-coords">--</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Elevation</span>
+                            <span class="metric-value" id="res-elevation">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Catchment statistics -->
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-chart-area"></i>
+                        <span>Catchment Hydrology</span>
+                    </div>
+                    
+                    <div class="metric-grid" style="margin-bottom: 0.75rem;">
+                        <div class="metric-card">
+                            <span class="metric-label">Catchment Area</span>
+                            <span class="metric-value highlight-cyan" id="res-catchment">--</span>
+                            <span class="metric-sub" id="res-catchment-ha">--</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Annual Rainfall</span>
+                            <span class="metric-value" id="res-rainfall">--</span>
+                            <span class="metric-sub" id="res-rainfall-source">Source: Open-Meteo API</span>
+                        </div>
+                    </div>
+                    
+                    <div class="metric-card">
+                        <span class="metric-label">Estimated Runoff Vol. (C=0.40)</span>
+                        <span class="metric-value highlight-green" id="res-runoff">--</span>
+                        <span class="metric-sub" id="res-runoff-liters">--</span>
+                    </div>
+                </div>
+
+                <!-- Pond Design Dimensions -->
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-shapes"></i>
+                        <span>Pond Engineering Design</span>
+                    </div>
+                    
+                    <div class="pond-details">
+                        <div class="pond-detail-row">
+                            <span class="pond-detail-label">Design Storage Capacity</span>
+                            <span class="pond-detail-value highlight-cyan" id="res-capacity">--</span>
+                        </div>
+                        <div class="pond-detail-row">
+                            <span class="pond-detail-label">Design Storage (Liters)</span>
+                            <span class="pond-detail-value" id="res-capacity-l">--</span>
+                        </div>
+                        <div class="pond-detail-row">
+                            <span class="pond-detail-label">Recommended Depth</span>
+                            <span class="pond-detail-value" id="res-depth">--</span>
+                        </div>
+                        <div class="pond-detail-row">
+                            <span class="pond-detail-label">Side Slope Ratio</span>
+                            <span class="pond-detail-value" id="res-slope">--</span>
+                        </div>
+                        <div class="pond-detail-row">
+                            <span class="pond-detail-label">Top Width (Square)</span>
+                            <span class="pond-detail-value" id="res-width-top">--</span>
+                        </div>
+                        <div class="pond-detail-row">
+                            <span class="pond-detail-label">Bottom Width (Square)</span>
+                            <span class="pond-detail-value" id="res-width-bottom">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Math calculations info -->
+                <div class="glass-card">
+                    <div class="card-title">
+                        <i class="fa-solid fa-square-root-variable"></i>
+                        <span>Hydrological Equations</span>
+                    </div>
+                    <div class="formula-card">
+                        <span class="pond-detail-label">Rational Equation:</span>
+                        <span class="formula-code">V_runoff = C * R * A</span>
+                        <span class="pond-detail-label">Inverted Truncated Pyramid Volume:</span>
+                        <span class="formula-code">V_pond = (h/3) * (A_top + A_bottom + sqrt(A_top * A_bottom))</span>
+                        <p style="color: var(--text-muted); font-size: 0.65rem; margin-top: 0.25rem;">Pond capacity designed to store 15% of annual runoff, with a safety factor.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Workspace -->
+        <div class="map-container">
+            <div id="map"></div>
+            
+            <!-- Map Placeholder / Instruction -->
+            <div class="map-placeholder" id="map-placeholder">
+                <i class="fa-solid fa-map"></i>
+                <h3>No Terrain Loaded</h3>
+                <p>Upload a KML/KMZ contour map in the sidebar to start terrain analysis and pond planning.</p>
+            </div>
+
+            <!-- Map Legends (Hidden initially) -->
+            <div class="map-overlay-card hidden" id="map-legend">
+                <div class="overlay-title">Elevation Range</div>
+                <div id="legend-gradient">
+                    <!-- Dynamic legend items -->
+                </div>
+                <div class="overlay-title" style="margin-top: 0.5rem;">Map Layers</div>
+                <div class="legend-row">
+                    <div class="legend-color" style="background: rgba(0, 242, 254, 0.25); border-color: var(--color-cyan);"></div>
+                    <span>Catchment Basin</span>
+                </div>
+                <div class="legend-row">
+                    <div class="legend-color" style="background: var(--color-red); border-radius: 50%;"></div>
+                    <span>Optimal Pond Site</span>
+                </div>
+            </div>
+
+            <!-- Processing loading panel -->
+            <div class="loading-overlay" id="loading-overlay">
+                <div class="spinner"></div>
+                <div class="loading-title" id="loading-title">Analyzing Terrain</div>
+                <div class="loading-step" id="loading-step">Processing started...</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Leaflet.js JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script>
+        // Initialize Map
+        const map = L.map('map', {
+            zoomControl: false
+        }).setView([20.0, 80.0], 5); // Default global view
+        
+        // Add Leaflet zoom control in bottom right
+        L.control.zoom({
+            position: 'bottomright'
+        }).addTo(map);
+
+        // Dark-styled base map using free OpenStreetMap tiles with CSS filter
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Apply dark theme filter to the tile layer
+        document.querySelector('.leaflet-tile-pane').style.filter = 'invert(1) hue-rotate(180deg) brightness(0.7) contrast(1.2) saturate(0.3)';
+
+        // Variables to keep track of map layers
+        let contourLayerGroup = L.layerGroup().addTo(map);
+        let catchmentLayers = [];  // one per site
+        let pondMarkers = [];      // one per site
+        let selectedFile = null;
+        let allSitesData = [];     // store all pond sites
+        let activeSiteIndex = 0;   // which site is selected
+        let lastContourSummary = null;
+
+        // UI Element References
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileNameLabel = document.getElementById('file-name-label');
+        const fileDescLabel = document.getElementById('file-desc-label');
+        const btnAnalyze = document.getElementById('btn-analyze');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingStep = document.getElementById('loading-step');
+        
+        const emptyStateCard = document.getElementById('empty-state-card');
+        const resultsPanel = document.getElementById('results-panel');
+        const mapPlaceholder = document.getElementById('map-placeholder');
+        const mapLegend = document.getElementById('map-legend');
+        const legendGradient = document.getElementById('legend-gradient');
+
+        // Drag and Drop handlers
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (ext !== 'kml' && ext !== 'kmz') {
+                alert('Please upload a KML or KMZ file.');
+                return;
+            }
+            selectedFile = file;
+            fileNameLabel.textContent = file.name;
+            fileDescLabel.textContent = `${(file.size / (1024 * 1024)).toFixed(2)} MB - Click to change`;
+        }
+
+        // Elevation color mapper (Interpolates between Green for lowest and Red for highest)
+        function getElevationColor(elevation, minElev, maxElev) {
+            if (maxElev === minElev) return '#4facfe'; // Fallback
+            const normalized = (elevation - minElev) / (maxElev - minElev);
+            
+            // HSL interpolation (120 is Green, 0 is Red/Orange)
+            const hue = (1.0 - normalized) * 120;
+            return `hsl(${hue}, 80%, 50%)`;
+        }
+
+        // Step-by-step progress simulation
+        const steps = [
+            "Parsing spatial KML contour lines...",
+            "Constructing 2D Digital Elevation Model (DEM)...",
+            "Smoothing terrain grid matrices...",
+            "Calculating flow gradients and D8 routers...",
+            "Tracing depression catchments...",
+            "Running OpenCV findContours boundary boundary locator...",
+            "Fetching historical rainfall data from Open-Meteo API..."
+        ];
+
+        function simulateProgress(callback) {
+            let idx = 0;
+            loadingStep.textContent = steps[0];
+            const interval = setInterval(() => {
+                idx++;
+                if (idx < steps.length) {
+                    loadingStep.textContent = steps[idx];
+                } else {
+                    clearInterval(interval);
+                }
+            }, 300);
+            return interval;
+        }
+
+        // Click Analyze
+        btnAnalyze.addEventListener('click', async () => {
+            if (!selectedFile) {
+                alert('Please select or upload a KML/KMZ contour map first.');
+                return;
+            }
+
+            // Show loading overlay
+            loadingOverlay.classList.add('active');
+            const progressInterval = simulateProgress();
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('runoff_coefficient', document.getElementById('param-runoff').value);
+            
+            const rainOverride = document.getElementById('param-rainfall').value;
+            if (rainOverride) {
+                formData.append('rainfall_mm', rainOverride);
+            }
+
+            try {
+                const response = await fetch('/api/analyze-contour', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                clearInterval(progressInterval);
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.detail || 'Analysis failed.');
+                }
+
+                const data = await response.json();
+                renderResults(data);
+
+            } catch (err) {
+                alert(`Error: ${err.message}`);
+                console.error(err);
+            } finally {
+                loadingOverlay.classList.remove('active');
+            }
+        });
+
+        const catchmentColors = ['#00f2fe', '#f97316', '#f59e0b', '#10b981', '#4facfe'];
+
+        function renderResults(data) {
+            // 1. Hide placeholder, show results
+            mapPlaceholder.classList.add('hidden');
+            emptyStateCard.classList.add('hidden');
+            resultsPanel.classList.remove('hidden');
+
+            allSitesData = data.all_pond_sites || [data.pond_recommendation];
+            lastContourSummary = data.contour_summary;
+
+            // 2. Clear existing layers
+            contourLayerGroup.clearLayers();
+            catchmentLayers.forEach(l => map.removeLayer(l));
+            pondMarkers.forEach(m => map.removeLayer(m));
+            catchmentLayers = [];
+            pondMarkers = [];
+
+            const sum = data.contour_summary;
+            const minElev = sum.elevation_range.min_m;
+            const maxElev = sum.elevation_range.max_m;
+
+            // 3. Render Contour Lines
+            data.contours_geojson.features.forEach(f => {
+                const elev = f.properties.elevation;
+                const coords = f.geometry.coordinates.map(p => [p[1], p[0]]);
+                L.polyline(coords, {
+                    color: getElevationColor(elev, minElev, maxElev),
+                    weight: 1.2,
+                    opacity: 0.55
+                }).addTo(contourLayerGroup);
+            });
+
+            // 4. Render ALL site markers and catchment polygons
+            allSitesData.forEach((site, idx) => {
+                const rank = idx + 1;
+                const color = catchmentColors[idx % catchmentColors.length];
+
+                // Catchment polygon
+                let cLayer = null;
+                if (site.catchment_polygon) {
+                    const polyCoords = site.catchment_polygon.coordinates[0].map(p => [p[1], p[0]]);
+                    cLayer = L.polygon(polyCoords, {
+                        color: color,
+                        weight: rank === 1 ? 2.5 : 1.5,
+                        dashArray: rank === 1 ? null : '5, 8',
+                        fillColor: color,
+                        fillOpacity: rank === 1 ? 0.18 : 0.08
+                    }).addTo(map);
+                }
+                catchmentLayers.push(cLayer);
+
+                // Numbered marker
+                const icon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div class="numbered-marker rank-${rank}">${rank}</div>`,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                const marker = L.marker([site.latitude, site.longitude], { icon: icon }).addTo(map);
+                const pond = site.recommended_pond;
+                marker.bindPopup(`
+                    <div style="font-family: 'Plus Jakarta Sans', sans-serif; color: #0a0e17; font-size: 0.8rem; line-height:1.4;">
+                        <h4 style="font-weight: 700; color: #10b981; border-bottom:1px solid #ddd; padding-bottom:3px; margin-bottom:5px;">Site #${rank} ${rank === 1 ? '(Best)' : ''}</h4>
+                        <b>Lat/Lon:</b> ${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}<br>
+                        <b>Elevation:</b> ${site.elevation_m.toFixed(2)}m<br>
+                        <b>Catchment:</b> ${site.catchment_area_hectares.toFixed(2)} ha<br>
+                        <b>Pond Capacity:</b> ${pond.capacity_m3.toLocaleString()} m³
+                    </div>
+                `);
+                marker.on('click', () => selectSite(idx));
+                pondMarkers.push(marker);
+            });
+
+            // 5. Build site selector buttons
+            const selectorEl = document.getElementById('site-selector');
+            selectorEl.innerHTML = '';
+            allSitesData.forEach((site, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'site-btn' + (idx === 0 ? ' active' : '');
+                btn.innerHTML = `<span class="site-rank">#${idx + 1}</span>${site.catchment_area_hectares.toFixed(1)} ha`;
+                btn.addEventListener('click', () => selectSite(idx));
+                selectorEl.appendChild(btn);
+            });
+
+            // 6. Generate Map Elevation Legend
+            mapLegend.classList.remove('hidden');
+            const legendSteps = 5;
+            let legendHTML = '';
+            for (let i = 0; i < legendSteps; i++) {
+                const fraction = i / (legendSteps - 1);
+                const elevVal = minElev + fraction * (maxElev - minElev);
+                const hexColor = getElevationColor(elevVal, minElev, maxElev);
+                legendHTML += `
+                    <div class="legend-row">
+                        <div class="legend-color" style="background: ${hexColor};"></div>
+                        <span>${elevVal.toFixed(0)} meters</span>
+                    </div>
+                `;
+            }
+            legendGradient.innerHTML = legendHTML;
+
+            // 7. Select site #1 by default
+            selectSite(0);
+        }
+
+        function selectSite(idx) {
+            activeSiteIndex = idx;
+            const site = allSitesData[idx];
+            const pond = site.recommended_pond;
+            const rank = idx + 1;
+
+            // Update selector active state
+            document.querySelectorAll('.site-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', i === idx);
+            });
+
+            // Update title
+            document.getElementById('site-title').textContent = `Pond Site #${rank}` + (rank === 1 ? ' (Best)' : '');
+
+            // Fill sidebar stats
+            document.getElementById('res-coords').textContent = `${site.latitude.toFixed(5)}° N, ${site.longitude.toFixed(5)}° E`;
+            document.getElementById('res-elevation').textContent = `${site.elevation_m.toFixed(2)} m`;
+            document.getElementById('res-catchment').textContent = `${site.catchment_area_sqm.toLocaleString()} m²`;
+            document.getElementById('res-catchment-ha').textContent = `≈ ${site.catchment_area_hectares.toFixed(2)} hectares`;
+            document.getElementById('res-rainfall').textContent = `${site.average_annual_rainfall_mm.toFixed(1)} mm`;
+            document.getElementById('res-rainfall-source').textContent = document.getElementById('param-rainfall').value
+                ? 'Source: Manual Override'
+                : 'Source: Open-Meteo Archive API';
+
+            document.getElementById('res-runoff').textContent = `${site.estimated_annual_runoff_m3.toLocaleString()} m³`;
+            document.getElementById('res-runoff-liters').textContent = `≈ ${(site.estimated_annual_runoff_m3 * 1000).toLocaleString()} liters`;
+
+            document.getElementById('res-capacity').textContent = `${pond.capacity_m3.toLocaleString()} m³`;
+            document.getElementById('res-capacity-l').textContent = `≈ ${pond.capacity_liters.toLocaleString()} liters`;
+            document.getElementById('res-depth').textContent = `${pond.depth_m.toFixed(1)} meters`;
+            document.getElementById('res-slope').textContent = `1 : ${pond.side_slope_ratio.toFixed(1)}`;
+            document.getElementById('res-width-top').textContent = `${pond.top_width_m.toFixed(1)} m x ${pond.top_width_m.toFixed(1)} m`;
+            document.getElementById('res-width-bottom').textContent = `${pond.bottom_width_m.toFixed(1)} m x ${pond.bottom_width_m.toFixed(1)} m`;
+
+            // Highlight selected catchment, dim others
+            catchmentLayers.forEach((layer, i) => {
+                if (!layer) return;
+                const color = catchmentColors[i % catchmentColors.length];
+                if (i === idx) {
+                    layer.setStyle({ weight: 2.5, dashArray: null, fillOpacity: 0.22, opacity: 1 });
+                } else {
+                    layer.setStyle({ weight: 1.0, dashArray: '5, 8', fillOpacity: 0.05, opacity: 0.4 });
+                }
+            });
+
+            // Zoom to selected catchment
+            if (catchmentLayers[idx]) {
+                map.fitBounds(catchmentLayers[idx].getBounds(), { padding: [50, 50] });
+            } else {
+                map.setView([site.latitude, site.longitude], 15);
+            }
+
+            // Open popup on selected marker
+            pondMarkers[idx].openPopup();
+        }
+    </script>
+</body>
+</html>
