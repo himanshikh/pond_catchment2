@@ -125,8 +125,9 @@ async def get_dashboard():
     return html_content
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5253))
+    port = int(os.environ.get("PORT", 5000))
     # If main.py is in root, use "main:app". If inside app folder, use "app.main:app"
     app_target = "app.main:app" if os.path.exists("app/main.py") else "main:app"
     uvicorn.run(app_target, host="0.0.0.0", port=port, reload=True)
+
 
