@@ -242,9 +242,12 @@ def analyze_contour_map(file_content: bytes = None, filename: str = None, runoff
         
         # If user specified a bounding box filter over uploaded KML
         if selected_bbox and len(selected_bbox) == 4:
-            min_lat, min_lon, max_lat, max_lon = map(float, selected_bbox)
+            b0, b1, b2, b3 = map(float, selected_bbox)
+            min_lat, max_lat = min(b0, b2), max(b0, b2)
+            min_lon, max_lon = min(b1, b3), max(b1, b3)
+
             filtered_pts = [pt for pt in all_points if min_lon <= pt[0] <= max_lon and min_lat <= pt[1] <= max_lat]
-            if len(filtered_pts) >= 10:
+            if len(filtered_pts) >= 5:
                 all_points = filtered_pts
                 filtered_contours = []
                 for c in contours:
@@ -255,10 +258,15 @@ def analyze_contour_map(file_content: bytes = None, filename: str = None, runoff
                             'coordinates': c_pts
                         })
                 contours = filtered_contours
+            else:
+                raise ValueError(f"No contour lines found inside selected region (Lat: {min_lat:.5f} to {max_lat:.5f}, Lon: {min_lon:.5f} to {max_lon:.5f}). Please draw a box directly over the contour map area.")
 
     elif selected_bbox and len(selected_bbox) == 4:
-        min_lat, min_lon, max_lat, max_lon = map(float, selected_bbox)
+        b0, b1, b2, b3 = map(float, selected_bbox)
+        min_lat, max_lat = min(b0, b2), max(b0, b2)
+        min_lon, max_lon = min(b1, b3), max(b1, b3)
         contours, all_points = fetch_elevation_for_bbox(min_lat, min_lon, max_lat, max_lon)
+
     else:
         raise ValueError("Please upload a KML/KMZ file or select a land area on the map.")
 
