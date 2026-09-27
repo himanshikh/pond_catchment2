@@ -34,29 +34,43 @@ async def analyze_contour(
     contour_map: UploadFile = File(None),
     file: UploadFile = File(None),
     runoff_coefficient: float = Form(0.4),
-    rainfall_mm: float = Form(None)
+    rainfall_mm: float = Form(None),
+    bbox: str = Form(None)
 ):
     upload_file = contour_map or file
-    if not upload_file:
+    selected_bbox = None
+    if bbox:
+        try:
+            parts = [float(x.strip()) for x in bbox.split(",") if x.strip()]
+            if len(parts) == 4:
+                selected_bbox = parts
+        except ValueError:
+            pass
+
+    if not upload_file and not selected_bbox:
         raise HTTPException(
             status_code=400,
-            detail="Missing file. Please upload a KML/KMZ file under variable name 'contour_map' or 'file'."
+            detail="Please upload a KML/KMZ file or select a land area on the map."
         )
         
-    filename = upload_file.filename
-    if not (filename.lower().endswith('.kml') or filename.lower().endswith('.kmz')):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file format. Only KML (.kml) and KMZ (.kmz) files are supported."
-        )
-        
-    try:
+    filename = None
+    file_content = None
+    if upload_file:
+        filename = upload_file.filename
+        if not (filename.lower().endswith('.kml') or filename.lower().endswith('.kmz')):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file format. Only KML (.kml) and KMZ (.kmz) files are supported."
+            )
         file_content = await upload_file.read()
+
+    try:
         result = analyze_contour_map(
             file_content=file_content,
             filename=filename,
             runoff_coeff=runoff_coefficient,
-            custom_rainfall_mm=rainfall_mm
+            custom_rainfall_mm=rainfall_mm,
+            selected_bbox=selected_bbox
         )
         return result
         
@@ -70,24 +84,35 @@ async def analyze_contour(
             detail=f"An error occurred during terrain analysis: {str(e)}"
         )
 
+@app.post("/api/analyze-region")
+async def analyze_region(
+    bbox: str = Form(...),
+    runoff_coefficient: float = Form(0.4),
+    rainfall_mm: float = Form(None)
+):
+    return await analyze_contour(None, None, runoff_coefficient, rainfall_mm, bbox)
+
 # Backward compatibility routes
 @app.post("/analyzeContour")
 async def analyze_contour_legacy(
     contour_map: UploadFile = File(None),
     file: UploadFile = File(None),
     runoff_coefficient: float = Form(0.4),
-    rainfall_mm: float = Form(None)
+    rainfall_mm: float = Form(None),
+    bbox: str = Form(None)
 ):
-    return await analyze_contour(contour_map, file, runoff_coefficient, rainfall_mm)
+    return await analyze_contour(contour_map, file, runoff_coefficient, rainfall_mm, bbox)
 
 @app.post("/findCatchment")
 async def find_catchment_legacy(
     contour_map: UploadFile = File(None),
     file: UploadFile = File(None),
     runoff_coefficient: float = Form(0.4),
-    rainfall_mm: float = Form(None)
+    rainfall_mm: float = Form(None),
+    bbox: str = Form(None)
 ):
-    return await analyze_contour(contour_map, file, runoff_coefficient, rainfall_mm)
+    return await analyze_contour(contour_map, file, runoff_coefficient, rainfall_mm, bbox)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard():

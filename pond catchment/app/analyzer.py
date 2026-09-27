@@ -7,7 +7,7 @@ import requests
 import numpy as np
 import scipy.interpolate as interpolate
 import scipy.ndimage as ndimage
-import cv2
+
 
 def parse_kml_or_kmz(file_content: bytes, filename: str) -> bytes:
     """
@@ -176,19 +176,85 @@ def design_pond(catchment_area_sqm: float, rainfall_mm: float, runoff_coeff: flo
         "excavation_volume_m3": float(round(pond_capacity_m3, 2))
     }
 
-def analyze_contour_map(file_content: bytes, filename: str, runoff_coeff: float = 0.4, custom_rainfall_mm: float = None):
+def fetch_elevation_for_bbox(min_lat: float, min_lon: float, max_lat: float, max_lon: float, grid_dim: int = 25):
     """
-    Performs the full geospatial and hydrological terrain analysis.
-    Returns optimal pond location, catchment area, and GeoJSON overlays.
+    Fetches elevation grid points for a user-selected land area bounding box
+    from Open-Meteo elevation API when no KML file is uploaded.
+    """
+    lats = np.linspace(min_lat, max_lat, grid_dim)
+    lons = np.linspace(min_lon, max_lon, grid_dim)
+    
+    flat_lats = []
+    flat_lons = []
+    for lat in lats:
+        for lon in lons:
+            flat_lats.append(round(float(lat), 5))
+            flat_lons.append(round(float(lon), 5))
+            
+    chunk_size = 400
+    elevations = []
+    for i in range(0, len(flat_lats), chunk_size):
+        c_lats = ",".join(map(str, flat_lats[i:i+chunk_size]))
+        c_lons = ",".join(map(str, flat_lons[i:i+chunk_size]))
+        url = f"https://api.open-meteo.com/v1/elevation?latitude={c_lats}&longitude={c_lons}"
+        try:
+            resp = requests.get(url, timeout=4.0)
+            if resp.status_code == 200:
+                elevs = resp.json().get("elevation", [])
+                elevations.extend(elevs)
+            else:
+                elevations.extend([100.0] * len(flat_lats[i:i+chunk_size]))
+        except Exception:
+            elevations.extend([100.0] * len(flat_lats[i:i+chunk_size]))
+            
+    all_pts = []
+    contours = []
+    for idx, (lat, lon) in enumerate(zip(flat_lats, flat_lons)):
+        elev = float(elevations[idx]) if idx < len(elevations) and elevations[idx] is not None else 100.0
+        all_pts.append((lon, lat, elev))
+        
+    elev_vals = [pt[2] for pt in all_pts]
+    if elev_vals:
+        e_min, e_max = min(elev_vals), max(elev_vals)
+        levels = np.linspace(e_min, e_max, 10)
+        for lvl in levels:
+            pts_at_lvl = [pt for pt in all_pts if abs(pt[2] - lvl) < max(0.5, (e_max - e_min)/10.0)]
+            if len(pts_at_lvl) >= 2:
+                contours.append({
+                    'elevation': float(round(lvl, 2)),
+                    'coordinates': [(pt[0], pt[1]) for pt in pts_at_lvl]
+                })
+                
+    return contours, all_pts
+
+def analyze_contour_map(file_content: bytes = None, filename: str = None, runoff_coeff: float = 0.4, custom_rainfall_mm: float = None, selected_bbox: list = None):
+    """
+    Performs full geospatial and hydrological terrain analysis.
+    Supports KML/KMZ upload or user-selected land area bounding box on map.
     """
     t_start = time.time()
     
-    # 1. Parse KML
-    kml_data = parse_kml_or_kmz(file_content, filename)
-    contours, all_points = extract_contours_from_kml(kml_data)
-    
+    contours, all_points = [], []
+
+    if file_content and filename:
+        kml_data = parse_kml_or_kmz(file_content, filename)
+        contours, all_points = extract_contours_from_kml(kml_data)
+        
+        # If user specified a bounding box filter over uploaded KML
+        if selected_bbox and len(selected_bbox) == 4:
+            min_lat, min_lon, max_lat, max_lon = map(float, selected_bbox)
+            filtered_pts = [pt for pt in all_points if min_lon <= pt[0] <= max_lon and min_lat <= pt[1] <= max_lat]
+            if len(filtered_pts) >= 10:
+                all_points = filtered_pts
+    elif selected_bbox and len(selected_bbox) == 4:
+        min_lat, min_lon, max_lat, max_lon = map(float, selected_bbox)
+        contours, all_points = fetch_elevation_for_bbox(min_lat, min_lon, max_lat, max_lon)
+    else:
+        raise ValueError("Please upload a KML/KMZ file or select a land area on the map.")
+
     if not all_points:
-        raise ValueError("No valid coordinates and elevations found in the KML file.")
+        raise ValueError("No valid terrain coordinate points found for analysis.")
+
         
     # Get bounding box and elevation range
     points_arr = np.array(all_points)
@@ -335,26 +401,79 @@ def analyze_contour_map(file_content: bytes, filename: str, runoff_coeff: float 
     top_n = min(5, len(candidate_sinks))
     top_candidates = candidate_sinks[:top_n]
     
-    # Helper: extract boundary polygon for a set of visited cells
+    # Helper: extract boundary polygon for a set of visited cells without OpenCV
     def extract_polygon(visited_cells):
-        mask = np.zeros((rows, cols), dtype=np.uint8)
+        if not visited_cells:
+            return None
+        visited_set = set(visited_cells)
+        dr = [-1, -1, 0, 1, 1, 1, 0, -1]
+        dc = [0, 1, 1, 1, 0, -1, -1, -1]
+        
+        boundary_cells = []
         for r, c in visited_cells:
-            mask[r, c] = 255
-        contours_cv, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours_cv:
-            largest_contour = max(contours_cv, key=cv2.contourArea)
-            geojson_coords = []
-            dlon = (lon_max - lon_min) / (cols - 1)
-            dlat = (lat_max - lat_min) / (rows - 1)
-            for pt in largest_contour:
-                c, r = pt[0][0], pt[0][1]
-                lon = float(lon_min + c * dlon)
-                lat = float(lat_min + r * dlat)
-                geojson_coords.append([lon, lat])
-            if geojson_coords:
-                geojson_coords.append(geojson_coords[0])
-                return {"type": "Polygon", "coordinates": [geojson_coords]}
+            is_boundary = False
+            for i in range(8):
+                nr, nc = r + dr[i], c + dc[i]
+                if (nr, nc) not in visited_set or nr < 0 or nr >= rows or nc < 0 or nc >= cols:
+                    is_boundary = True
+                    break
+            if is_boundary:
+                boundary_cells.append((r, c))
+                
+        if not boundary_cells:
+            return None
+            
+        start_cell = min(boundary_cells, key=lambda p: (p[0], p[1]))
+        curr = start_cell
+        curr_dir = 0
+        
+        path = [curr]
+        max_steps = len(boundary_cells) * 4 + 50
+        steps = 0
+        
+        while steps < max_steps:
+            steps += 1
+            found = False
+            search_start = (curr_dir + 5) % 8
+            for i in range(8):
+                d = (search_start + i) % 8
+                nr, nc = curr[0] + dr[d], curr[1] + dc[d]
+                if (nr, nc) in visited_set:
+                    curr = (nr, nc)
+                    curr_dir = d
+                    found = True
+                    break
+            if not found or curr == start_cell:
+                break
+            path.append(curr)
+            
+        if len(path) < 3:
+            min_r = min(r for r, c in visited_cells)
+            max_r = max(r for r, c in visited_cells)
+            min_c = min(c for r, c in visited_cells)
+            max_c = max(c for r, c in visited_cells)
+            path = [(min_r, min_c), (min_r, max_c), (max_r, max_c), (max_r, min_c)]
+
+        step = max(1, len(path) // 60)
+        simplified_path = path[::step]
+        if simplified_path[-1] != path[-1]:
+            simplified_path.append(path[-1])
+            
+        dlon = (lon_max - lon_min) / max(1, cols - 1)
+        dlat = (lat_max - lat_min) / max(1, rows - 1)
+        
+        coords = []
+        for r, c in simplified_path:
+            lon = float(lon_min + c * dlon)
+            lat = float(lat_min + r * dlat)
+            coords.append([lon, lat])
+            
+        if coords:
+            if coords[0] != coords[-1]:
+                coords.append(coords[0])
+            return {"type": "Polygon", "coordinates": [coords]}
         return None
+
     
     # 5. Fetch rainfall once (same region for all candidates)
     center_lat = top_candidates[0]['lat']

@@ -15,6 +15,9 @@
     
     <!-- Leaflet.js CSS for Interactive Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet.draw CSS for Map Land Area Selection -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+
     
     <style>
         :root {
@@ -676,10 +679,24 @@
                     <div class="upload-zone" id="drop-zone">
                         <i class="fa-solid fa-map-location-dot"></i>
                         <h4 id="file-name-label">Upload Contour Map</h4>
-                        <p id="file-desc-label">Drag & drop KML or KMZ file</p>
+                        <p id="file-desc-label">Drag & drop KML/KMZ or draw on map</p>
                         <input type="file" id="file-input" class="file-input" accept=".kml,.kmz">
                     </div>
                 </div>
+
+                <!-- Land Area Selection Badge -->
+                <div class="form-group" id="selection-status-box" style="display:none; background: rgba(0, 242, 254, 0.08); border: 1px dashed var(--color-cyan); padding: 0.65rem; border-radius: 8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color: var(--color-cyan); font-weight:700; font-size:0.75rem;">
+                            <i class="fa-solid fa-draw-polygon"></i> Land Area Selected
+                        </span>
+                        <button id="btn-clear-selection" style="background:transparent; border:none; color:var(--color-red); font-size:0.75rem; cursor:pointer;" title="Clear Selection">
+                            <i class="fa-solid fa-xmark"></i> Clear
+                        </button>
+                    </div>
+                    <div id="selection-coords-text" style="font-family: var(--font-mono); font-size:0.68rem; color: #fff; margin-top:0.35rem;"></div>
+                </div>
+
 
                 <div class="form-group">
                     <label class="form-label" for="param-runoff">Runoff Coefficient (C)</label>
@@ -865,6 +882,8 @@
 
     <!-- Leaflet.js JavaScript -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet.draw JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     
     <script>
         // Initialize Map
@@ -886,6 +905,65 @@
         // Apply dark theme filter to the tile layer
         document.querySelector('.leaflet-tile-pane').style.filter = 'invert(1) hue-rotate(180deg) brightness(0.7) contrast(1.2) saturate(0.3)';
 
+        // Leaflet Draw feature group & toolbar initialization
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        const drawControl = new L.Control.Draw({
+            position: 'topleft',
+            draw: {
+                polyline: false,
+                circle: false,
+                circlemarker: false,
+                marker: false,
+                polygon: {
+                    allowIntersection: false,
+                    shapeOptions: { color: '#00f2fe', weight: 2.5, fillColor: '#00f2fe', fillOpacity: 0.15 }
+                },
+                rectangle: {
+                    shapeOptions: { color: '#00f2fe', weight: 2.5, fillColor: '#00f2fe', fillOpacity: 0.15 }
+                }
+            },
+            edit: {
+                featureGroup: drawnItems,
+                remove: true
+            }
+        });
+        map.addControl(drawControl);
+
+        let selectedBbox = null;
+
+        // Listen for drawn land area shapes
+        map.on(L.Draw.Event.CREATED, (e) => {
+            drawnItems.clearLayers();
+            const layer = e.layer;
+            drawnItems.addLayer(layer);
+            
+            const bounds = layer.getBounds();
+            const minLat = bounds.getSouth().toFixed(5);
+            const minLon = bounds.getWest().toFixed(5);
+            const maxLat = bounds.getNorth().toFixed(5);
+            const maxLon = bounds.getEast().toFixed(5);
+            
+            selectedBbox = `${minLat},${minLon},${maxLat},${maxLon}`;
+            
+            // Show badge
+            const statusBox = document.getElementById('selection-status-box');
+            const coordsText = document.getElementById('selection-coords-text');
+            statusBox.style.display = 'block';
+            coordsText.textContent = `SW: ${minLat}°, ${minLon}°\nNE: ${maxLat}°, ${maxLon}°`;
+        });
+
+        map.on(L.Draw.Event.DELETED, () => {
+            clearLandAreaSelection();
+        });
+
+        document.getElementById('btn-clear-selection').addEventListener('click', clearLandAreaSelection);
+
+        function clearLandAreaSelection() {
+            drawnItems.clearLayers();
+            selectedBbox = null;
+            document.getElementById('selection-status-box').style.display = 'none';
+        }
+
         // Variables to keep track of map layers
         let contourLayerGroup = L.layerGroup().addTo(map);
         let catchmentLayers = [];  // one per site
@@ -894,6 +972,7 @@
         let allSitesData = [];     // store all pond sites
         let activeSiteIndex = 0;   // which site is selected
         let lastContourSummary = null;
+
 
         // UI Element References
         const dropZone = document.getElementById('drop-zone');
@@ -959,12 +1038,12 @@
 
         // Step-by-step progress simulation
         const steps = [
-            "Parsing spatial KML contour lines...",
+            "Parsing spatial contour isolines...",
             "Constructing 2D Digital Elevation Model (DEM)...",
             "Smoothing terrain grid matrices...",
             "Calculating flow gradients and D8 routers...",
             "Tracing depression catchments...",
-            "Running OpenCV findContours boundary boundary locator...",
+            "Tracing boundary contours via topological grid analysis...",
             "Fetching historical rainfall data from Open-Meteo API..."
         ];
 
@@ -984,8 +1063,8 @@
 
         // Click Analyze
         btnAnalyze.addEventListener('click', async () => {
-            if (!selectedFile) {
-                alert('Please select or upload a KML/KMZ contour map first.');
+            if (!selectedFile && !selectedBbox) {
+                alert('Please upload a KML/KMZ contour map or draw a land area box on the map first.');
                 return;
             }
 
@@ -994,7 +1073,12 @@
             const progressInterval = simulateProgress();
 
             const formData = new FormData();
-            formData.append('file', selectedFile);
+            if (selectedFile) {
+                formData.append('file', selectedFile);
+            }
+            if (selectedBbox) {
+                formData.append('bbox', selectedBbox);
+            }
             formData.append('runoff_coefficient', document.getElementById('param-runoff').value);
             
             const rainOverride = document.getElementById('param-rainfall').value;
@@ -1007,6 +1091,7 @@
                     method: 'POST',
                     body: formData
                 });
+
 
                 clearInterval(progressInterval);
 
@@ -1088,17 +1173,22 @@
                 const marker = L.marker([site.latitude, site.longitude], { icon: icon }).addTo(map);
                 const pond = site.recommended_pond;
                 marker.bindPopup(`
-                    <div style="font-family: 'Plus Jakarta Sans', sans-serif; color: #0a0e17; font-size: 0.8rem; line-height:1.4;">
-                        <h4 style="font-weight: 700; color: #10b981; border-bottom:1px solid #ddd; padding-bottom:3px; margin-bottom:5px;">Site #${rank} ${rank === 1 ? '(Best)' : ''}</h4>
-                        <b>Lat/Lon:</b> ${site.latitude.toFixed(5)}, ${site.longitude.toFixed(5)}<br>
-                        <b>Elevation:</b> ${site.elevation_m.toFixed(2)}m<br>
-                        <b>Catchment:</b> ${site.catchment_area_hectares.toFixed(2)} ha<br>
-                        <b>Pond Capacity:</b> ${pond.capacity_m3.toLocaleString()} m³
+                    <div style="font-family: 'Plus Jakarta Sans', sans-serif; color: #0a0e17; font-size: 0.82rem; line-height:1.45; min-width: 220px;">
+                        <h4 style="font-weight: 800; color: #00f2fe; border-bottom:1px solid #e2e8f0; padding-bottom:4px; margin-bottom:6px;">
+                            📍 Pond Site #${rank} ${rank === 1 ? '(Optimal)' : ''}
+                        </h4>
+                        <div style="margin-bottom: 4px;"><b>Suggested Location:</b> ${site.latitude.toFixed(5)}° N, ${site.longitude.toFixed(5)}° E (${site.elevation_m.toFixed(1)}m elev)</div>
+                        <div style="margin-bottom: 4px;"><b>Catchment Area:</b> <span style="color:#0284c7; font-weight:700;">${site.catchment_area_sqm.toLocaleString()} m²</span> (${site.catchment_area_hectares.toFixed(2)} ha)</div>
+                        <div style="margin-bottom: 4px;"><b>Expected Water Volume:</b> <span style="color:#16a34a; font-weight:700;">${site.estimated_annual_runoff_m3.toLocaleString()} m³</span> (${(site.estimated_annual_runoff_m3 * 1000).toLocaleString()} L)</div>
+                        <div style="margin-top: 4px; padding-top:4px; border-top:1px dashed #cbd5e1; font-size:0.75rem; color:#475569;">
+                            Design Storage: ${pond.capacity_m3.toLocaleString()} m³ | Depth: ${pond.depth_m}m
+                        </div>
                     </div>
                 `);
                 marker.on('click', () => selectSite(idx));
                 pondMarkers.push(marker);
             });
+
 
             // 5. Build site selector buttons
             const selectorEl = document.getElementById('site-selector');
