@@ -246,6 +246,16 @@ def analyze_contour_map(file_content: bytes = None, filename: str = None, runoff
             filtered_pts = [pt for pt in all_points if min_lon <= pt[0] <= max_lon and min_lat <= pt[1] <= max_lat]
             if len(filtered_pts) >= 10:
                 all_points = filtered_pts
+                filtered_contours = []
+                for c in contours:
+                    c_pts = [pt for pt in c['coordinates'] if min_lon <= pt[0] <= max_lon and min_lat <= pt[1] <= max_lat]
+                    if len(c_pts) >= 2:
+                        filtered_contours.append({
+                            'elevation': c['elevation'],
+                            'coordinates': c_pts
+                        })
+                contours = filtered_contours
+
     elif selected_bbox and len(selected_bbox) == 4:
         min_lat, min_lon, max_lat, max_lon = map(float, selected_bbox)
         contours, all_points = fetch_elevation_for_bbox(min_lat, min_lon, max_lat, max_lon)
